@@ -184,6 +184,9 @@ export * from './hooks/index.js';
 // Export hook types
 export * from './hooks/types.js';
 
+// Export interceptor system
+export * from './interceptor/index.js';
+
 // Export agent types
 export * from './agents/types.js';
 
