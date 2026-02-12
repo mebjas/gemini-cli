@@ -1088,7 +1088,31 @@ export const useGeminiStream = (
     ): Promise<StreamProcessingStatus> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
-      for await (const event of stream) {
+      for await (let event of stream) {
+        // Execute output interceptors
+        try {
+          const interceptorManager = config.getInterceptorManager();
+          const interceptResult =
+            await interceptorManager.executeOutputInterceptors(
+              event,
+              config.getActiveModel(),
+            );
+
+          if (interceptResult.blocked) {
+            // Skip this event if blocked by interceptor
+            continue;
+          }
+
+          // Use intercepted event if modified
+          event = interceptResult.event;
+        } catch (error) {
+          // If interceptor fails, log but continue with original event
+          debugLogger.error(
+            '[useGeminiStream] Output interceptor error:',
+            error,
+          );
+        }
+
         if (
           event.type !== ServerGeminiEventType.Thought &&
           thoughtRef.current !== null
@@ -1203,6 +1227,7 @@ export const useGeminiStream = (
       pendingHistoryItemRef,
       setPendingHistoryItem,
       setThought,
+      config,
     ],
   );
   const submitQuery = useCallback(
@@ -1277,9 +1302,37 @@ export const useGeminiStream = (
             lastQueryRef.current = queryToSend;
             lastPromptIdRef.current = prompt_id!;
 
+            // Execute input interceptors
+            let interceptedQuery = queryToSend;
+            try {
+              const interceptorManager = config.getInterceptorManager();
+              const interceptResult =
+                await interceptorManager.executeInputInterceptors(
+                  queryToSend,
+                  config.getActiveModel(),
+                  options?.isContinuation,
+                );
+
+              if (interceptResult.blocked) {
+                setIsResponding(false);
+                addItem({
+                  type: 'error',
+                  text:
+                    interceptResult.blockReason ||
+                    'Input blocked by interceptor',
+                });
+                return;
+              }
+
+              interceptedQuery = interceptResult.message;
+            } catch (error) {
+              // If interceptor fails, log but continue with original query
+              debugLogger.error('[useGeminiStream] Interceptor error:', error);
+            }
+
             try {
               const stream = geminiClient.sendMessageStream(
-                queryToSend,
+                interceptedQuery,
                 abortSignal,
                 prompt_id!,
                 undefined,
