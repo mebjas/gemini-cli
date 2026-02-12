@@ -39,6 +39,7 @@ import { EnterPlanModeTool } from '../tools/enter-plan-mode.js';
 import { GeminiClient } from '../core/client.js';
 import { BaseLlmClient } from '../core/baseLlmClient.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
+import { InterceptorManager } from '../interceptor/interceptorManager.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import type { TelemetryTarget } from '../telemetry/index.js';
@@ -674,6 +675,7 @@ export class Config {
   private lastModeSwitchTime: number = Date.now();
 
   private approvedPlanPath: string | undefined;
+  private interceptorManager?: InterceptorManager;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -856,6 +858,9 @@ export class Config {
     this.experiments = params.experiments;
     this.onModelChange = params.onModelChange;
     this.onReload = params.onReload;
+
+    // Initialize interceptor manager
+    this.interceptorManager = new InterceptorManager(this.sessionId);
 
     if (params.contextFileName) {
       setGeminiMdFilename(params.contextFileName);
@@ -2336,6 +2341,13 @@ export class Config {
 
   getMessageBus(): MessageBus {
     return this.messageBus;
+  }
+
+  getInterceptorManager(): InterceptorManager {
+    if (!this.interceptorManager) {
+      throw new Error('InterceptorManager not initialized');
+    }
+    return this.interceptorManager;
   }
 
   getPolicyEngine(): PolicyEngine {
